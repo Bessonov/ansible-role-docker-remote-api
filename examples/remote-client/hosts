@@ -1,0 +1,12 @@
+node-1 ansible_host=localhost ansible_port=10001 ansible_user=vagrant ansible_ssh_private_key_file=.vagrant/machines/ubuntu-01/virtualbox/private_key
+node-2 ansible_host=localhost ansible_port=10002 ansible_user=vagrant ansible_ssh_private_key_file=.vagrant/machines/ubuntu-02/virtualbox/private_key
+node-3 ansible_host=localhost ansible_port=10003 ansible_user=vagrant ansible_ssh_private_key_file=.vagrant/machines/ubuntu-03/virtualbox/private_key
+
+[managers]
+node-2
+node-3
+
+[workers]
+node-2
+node-3
+

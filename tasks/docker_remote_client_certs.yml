@@ -1,0 +1,40 @@
+
+- name: create a client cert
+  run_once: true
+  delegate_to: "{{ docker_remote_client_host }}"
+  become: "{{ docker_remote_client_become }}"
+  shell: >
+    docker run
+    -e CLIENT=true
+    -e OVERWRITE="{{ create_ca_cert_result.changed | lower }}"
+    -e VALID_DAYS="{{ docker_remote_certs_client_valid_days }}"
+    -v "{{ docker_remote_certs_ca_path_abs }}":/ca
+    -v "{{ docker_remote_certs_client_path_abs }}":/client
+    "{{ docker_remote_certs_image }}"
+  register: create_client_cert_result
+  changed_when: create_client_cert_result.stdout_lines | length > 0
+
+- name: copy certs to .docker
+  block:
+    - name: create .docker directory
+      file:
+        path: "~/.docker/{{ docker_remote_client_profile }}/"
+        state: directory
+
+    - name: copy certs
+      copy:
+        src: "{{ item.src }}"
+        dest: "~/.docker/{{ docker_remote_client_profile }}/{{ item.dest }}"
+        remote_src: true
+      with_items:
+        - src: "{{ docker_remote_certs_ca_path }}/ca.pem"
+          dest: "ca.pem"
+        - src: "{{ docker_remote_certs_client_path }}/client-cert.pem"
+          dest: "cert.pem"
+        - src: "{{ docker_remote_certs_client_path }}/client-key.pem"
+          dest: "key.pem"
+
+  run_once: true
+  delegate_to: "{{ docker_remote_client_host }}"
+  when: docker_remote_client_use_certs_as_default
+

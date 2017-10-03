@@ -1,0 +1,38 @@
+
+- hosts: node-1:managers:workers
+  strategy: free
+  roles:
+    - role: Bessonov.docker
+
+- hosts: managers
+  serial: 1
+  roles:
+    - role: Bessonov.docker-swarm
+      swarm_worker_hosts: workers
+      # virtualbox interface
+      swarm_cluster_bootstrap_parameters:
+        --advertise-addr: enp0s8
+
+- hosts: managers
+  roles:
+    - role: Bessonov.docker-remote-api
+      docker_remote_client_host: node-1
+      # copy certs to .docker
+      docker_remote_client_use_certs_as_default: true
+      docker_remote_certs_server_additional_subjects:
+        - "IP: {{ ansible_enp0s8.ipv4.address }}"
+
+- hosts: node-1
+  tasks:
+    - name: clone wordpress app
+      git:
+        repo: 'https://github.com/jlk/wordpress-swarm.git'
+        dest: wordpress-swarm
+    - name: deploy wordpress stack
+      command: docker stack deploy --compose-file wordpress-swarm/docker-stack.yml wordpress
+      environment:
+        DOCKER_HOST: "tcp://172.17.10.102:2376"
+        DOCKER_TLS_VERIFY: 1
+      register: docker_stack_deploy_result
+    - debug:
+        var: docker_stack_deploy_result

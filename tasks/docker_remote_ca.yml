@@ -1,0 +1,14 @@
+
+- name: create a ca
+  run_once: true
+  delegate_to: "{{ docker_remote_client_host }}"
+  become: "{{ docker_remote_client_become }}"
+  shell: >
+    docker run
+    -e CA=true
+    -e VALID_DAYS="{{ docker_remote_certs_ca_valid_days }}"
+    -v "{{ docker_remote_certs_ca_path_abs }}":/ca
+    "{{ docker_remote_certs_image }}"
+  register: create_ca_cert_result
+  changed_when: create_ca_cert_result.stdout_lines | length > 0
+

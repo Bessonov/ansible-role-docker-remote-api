@@ -1,0 +1,50 @@
+# -*- mode: ruby -*-
+# # vi: set ft=ruby :
+
+$num_instances = 3
+$instance_name_prefix = "ubuntu"
+$vm_gui = false
+$vm_memory = 768
+$vm_cpus = 1
+
+# Use old vb_xxx config variables when set
+def vm_gui
+	$vb_gui.nil? ? $vm_gui : $vb_gui
+end
+
+def vm_memory
+	$vb_memory.nil? ? $vm_memory : $vb_memory
+end
+
+def vm_cpus
+	$vb_cpus.nil? ? $vm_cpus : $vb_cpus
+end
+
+Vagrant.configure("2") do |config|
+
+	config.vm.box = "bento/ubuntu-16.04"
+
+	(1..$num_instances).each do |i|
+
+		config.vm.define vm_name = "%s-%02d" % [$instance_name_prefix, i] do |config|
+			config.vm.hostname = vm_name
+
+			# ssh access for ansible
+			config.vm.network "forwarded_port", guest: 22, host: 10000+i
+
+			if i > 1
+				config.vm.network "forwarded_port", guest: 8080, host: 8080-2+i
+			end
+
+			config.vm.provider :virtualbox do |vb|
+				vb.gui = vm_gui
+				vb.memory = vm_memory
+				vb.cpus = vm_cpus
+			end
+
+			ip = "172.17.10.#{i+100}"
+			config.vm.network :private_network, ip: ip
+		end
+	end
+
+end

@@ -1,0 +1,51 @@
+
+# client used to build images and access docker remotely
+docker_remote_client_host: localhost
+
+# use sudo on the client
+docker_remote_client_become: true
+
+# set profile for the client
+# one client can manage multiple clusters, distinguished by profile
+# see DOCKER_CERT_PATH on https://docs.docker.com/engine/security/https/#client-modes
+docker_remote_client_profile: '.'
+
+# use generated certs as default for docker connection
+docker_remote_client_use_certs_as_default: false
+
+# port to run remote access container
+# helpful if multipe client should access remote docker
+docker_remote_server_api_port: 2376
+
+# force to rebuild images and redeploy
+# don't touch any existing certs
+docker_remote_server_force_deploy: false
+
+# naming scheme for deployed image and container
+docker_remote_server_image_name: "remote-api-{{ inventory_hostname }}-{{ docker_remote_client_host }}"
+
+# relative path for ca certs on the client, used by ansible
+docker_remote_certs_ca_path: "certs/{{ docker_remote_client_profile }}/ca"
+# absolute path for ca certs on the client, used by docker
+docker_remote_certs_ca_path_abs: "`pwd`/{{ docker_remote_certs_ca_path }}"
+# ca certs expiration
+docker_remote_certs_ca_valid_days: 3650
+
+# same as above, but for the client certs
+docker_remote_certs_client_path: "certs/{{ docker_remote_client_profile }}/client"
+docker_remote_certs_client_path_abs: "`pwd`/{{ docker_remote_certs_client_path }}"
+docker_remote_certs_client_valid_days: 3650
+
+# same as above, but for the server certs
+docker_remote_certs_server_path: "certs/{{ docker_remote_client_profile }}/server/{{ inventory_hostname }}"
+docker_remote_certs_server_path_abs: "`pwd`/{{ docker_remote_certs_server_path }}"
+docker_remote_certs_server_valid_days: 3650
+
+# common name used in server cert
+docker_remote_certs_server_cn: "{{ ansible_hostname }}"
+# additional subjects to use in server certs
+docker_remote_certs_server_additional_subjects: []
+
+# image for certificate creation
+docker_remote_certs_image: bessonov/docker-remote-api-certs:0.0.1
+

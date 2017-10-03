@@ -1,0 +1,184 @@
+
+- name: check if container is present
+  become: "{{ docker_remote_client_become }}"
+  shell: docker ps -a | grep "{{ docker_remote_server_image_name }}"
+  failed_when: container_absent_result.rc > 1
+  changed_when: false
+  register: container_absent_result
+
+- name: create server certs
+  delegate_to: "{{ docker_remote_client_host }}"
+  become: "{{ docker_remote_client_become }}"
+  shell: >
+    docker run
+    -e SERVER=true
+    -e OVERWRITE="{{ create_ca_cert_result.changed | lower }}"
+    -e VALID_DAYS="{{ docker_remote_certs_server_valid_days }}"
+    -e SERVER_CERT_CN="{{ docker_remote_certs_server_cn }}"
+    -e SERVER_SUBJ_ALT_NAMES="{{ docker_remote_certs_server_additional_subjects | join(',') }}"
+    -v "{{ docker_remote_certs_ca_path_abs }}":/ca
+    -v "{{ docker_remote_certs_server_path_abs }}":/server
+    "{{ docker_remote_certs_image }}"
+  register: create_server_cert_result
+  changed_when: create_server_cert_result.stdout_lines | length > 0
+
+- debug:
+    msg: container should be deployed
+  register: deploy_container
+  changed_when: >
+    (container_absent_result.rc | bool)
+    or create_server_cert_result.changed
+    or docker_remote_server_force_deploy
+
+- name: create a server image
+  block:
+    - name: copy ca cert to build
+      become: "{{ docker_remote_client_become }}"
+      delegate_to: "{{ docker_remote_client_host }}"
+      copy:
+        remote_src: true
+        src: "{{ item }}"
+        dest: "{{ docker_remote_certs_server_path }}"
+      with_items:
+        - "{{ docker_remote_certs_ca_path }}/ca.pem"
+
+    - name: copy files to build
+      become: "{{ docker_remote_client_become }}"
+      delegate_to: "{{ docker_remote_client_host }}"
+      copy:
+        src: "{{ item }}"
+        dest: "{{ docker_remote_certs_server_path }}"
+      with_items:
+        - "{{ role_path }}/files/remote-api/secure.conf"
+        - "{{ role_path }}/files/remote-api/Dockerfile"
+
+    - name: build server image
+      delegate_to: "{{ docker_remote_client_host }}"
+      become: "{{ docker_remote_client_become }}"
+      shell: docker build -t "{{ docker_remote_server_image_name }}" "{{ docker_remote_certs_server_path_abs }}"
+
+    - name: save server image
+      delegate_to: "{{ docker_remote_client_host }}"
+      become: "{{ docker_remote_client_become }}"
+      shell: docker save --output "{{ docker_remote_certs_server_path_abs }}/{{ docker_remote_server_image_name }}.tar" "{{ docker_remote_server_image_name }}"
+
+    - name: fix permissions of saved image
+      delegate_to: "{{ docker_remote_client_host }}"
+      become: "{{ docker_remote_client_become }}"
+      file:
+        path: "{{ docker_remote_certs_server_path }}/{{ docker_remote_server_image_name }}.tar"
+        mode: 0644
+
+    - name: remove server image
+      delegate_to: "{{ docker_remote_client_host }}"
+      become: "{{ docker_remote_client_become }}"
+      shell: docker rmi "{{ docker_remote_server_image_name }}"
+
+  when: deploy_container.changed
+
+- name: copy image
+  block:
+    - name: copy image from localhost
+      block:
+        - name: create remote temp file
+          tempfile:
+            state: file
+            suffix: .tar
+          register: remote_image_tmp
+
+        - name: copy image to destination
+          become: "{{ docker_remote_client_become }}"
+          copy:
+            src: "{{ docker_remote_certs_server_path }}/{{ docker_remote_server_image_name }}.tar"
+            dest: "{{ remote_image_tmp.path }}"
+      when: docker_remote_client_host in ('localhost', '127.0.0.1')
+
+    - name: copy image between nodes
+      block:
+        - name: create local temp file for "{{ docker_remote_server_image_name }}"
+          delegate_to: localhost
+          tempfile:
+            state: file
+            suffix: .tar
+          register: local_image_tmp
+
+        - name: copy image to local
+          delegate_to: "{{ docker_remote_client_host }}"
+          become: "{{ docker_remote_client_become }}"
+          fetch:
+            src: "{{ docker_remote_certs_server_path }}/{{ docker_remote_server_image_name }}.tar"
+            dest: "{{ local_image_tmp.path }}"
+            flat: true
+
+        - name: create remote temp file
+          tempfile:
+            state: file
+            suffix: .tar
+          register: remote_image_tmp
+
+        - name: copy image to destination
+          copy:
+            src: "{{ local_image_tmp.path }}"
+            dest: "{{ remote_image_tmp.path }}"
+
+        - name: clean local temp file
+          delegate_to: localhost
+          file:
+            path: "{{ local_image_tmp.path }}"
+            state: absent
+
+      when: docker_remote_client_host not in ('localhost', '127.0.0.1')
+
+  when: deploy_container.changed
+
+- name: deploy image
+  block:
+    - name: store old images
+      become: true
+      command: docker images --filter reference="{{ docker_remote_server_image_name }}" --format "{% raw %}"{{.ID}}"{% endraw %}"
+      register: store_old_images_result
+
+    - name: import image
+      become: true
+      command: docker load --input "{{ remote_image_tmp.path }}"
+
+    - name: clean artifact path
+      file:
+        path: "{{ remote_image_tmp.path }}"
+        state: absent
+
+    - name: try to remove old api container
+      become: true
+      shell: >
+        docker stop "{{ docker_remote_server_image_name }}" | xargs docker rm
+      failed_when: false
+
+    - name: create an api container
+      become: true
+      command: >
+        docker run
+         --name "{{ docker_remote_server_image_name }}"
+         -v /var/run/docker.sock:/var/run/docker.sock
+         -p "{{ docker_remote_server_api_port }}:2376"
+         -d
+         "{{ docker_remote_server_image_name }}"
+
+    - name: clean up old images
+      become: true
+      command: docker rmi "{{ item }}"
+      with_items: "{{ store_old_images_result.stdout_lines }}"
+
+  when: deploy_container.changed
+
+- name: clean up files
+  delegate_to: "{{ docker_remote_client_host }}"
+  become: "{{ docker_remote_client_become }}"
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "{{ docker_remote_certs_server_path }}/secure.conf"
+    - "{{ docker_remote_certs_server_path }}/Dockerfile"
+    - "{{ docker_remote_certs_server_path }}/ca.pem"
+    - "{{ docker_remote_certs_server_path }}/{{ docker_remote_server_image_name }}.tar"
+

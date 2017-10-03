@@ -1,0 +1,4 @@
+- include: docker_remote_ca.yml
+- include: docker_remote_client_certs.yml
+- include: docker_remote_server_certs.yml
+

@@ -1,0 +1,26 @@
+galaxy_info:
+  author: Anton Bessonov
+  description: Allows secure access to remote docker swarm cluster
+
+  license: MIT
+
+  min_ansible_version: 2.3
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - trusty
+        - xenial
+
+  galaxy_tags:
+    - docker
+    - swarm
+    - cluster
+    - remote
+    - tls
+    - system
+    - ubuntu
+    - daemon
+
+dependencies: []
+

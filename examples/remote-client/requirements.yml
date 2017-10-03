@@ -1,0 +1,3 @@
+- name: Bessonov.docker
+- name: Bessonov.docker-swarm
+- name: Bessonov.docker-remote-api
