@@ -84,13 +84,13 @@
           tempfile:
             state: file
             suffix: .tar
-          register: remote_image_tmp
+          register: remote_image_tmp_direct
 
         - name: copy image to destination
           become: "{{ docker_remote_client_become }}"
           copy:
             src: "{{ docker_remote_certs_server_path }}/{{ docker_remote_server_image_name }}.tar"
-            dest: "{{ remote_image_tmp.path }}"
+            dest: "{{ remote_image_tmp_direct.path }}"
       when: docker_remote_client_host in ('localhost', '127.0.0.1')
 
     - name: copy image between nodes
@@ -114,12 +114,12 @@
           tempfile:
             state: file
             suffix: .tar
-          register: remote_image_tmp
+          register: remote_image_tmp_copy
 
         - name: copy image to destination
           copy:
             src: "{{ local_image_tmp.path }}"
-            dest: "{{ remote_image_tmp.path }}"
+            dest: "{{ remote_image_tmp_copy.path }}"
 
         - name: clean local temp file
           delegate_to: localhost
@@ -140,11 +140,11 @@
 
     - name: import image
       become: true
-      command: docker load --input "{{ remote_image_tmp.path }}"
+      command: docker load --input "{{ remote_image_tmp_direct.path | default(remote_image_tmp_copy.path) }}"
 
     - name: clean artifact path
       file:
-        path: "{{ remote_image_tmp.path }}"
+        path: "{{ remote_image_tmp_direct.path | default(remote_image_tmp_copy.path) }}"
         state: absent
 
     - name: try to remove old api container

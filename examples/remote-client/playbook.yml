@@ -20,7 +20,7 @@
       # copy certs to .docker
       docker_remote_client_use_certs_as_default: true
       docker_remote_certs_server_additional_subjects:
-        - "IP: {{ ansible_enp0s8.ipv4.address }}"
+        - "IP:{{ ansible_enp0s8.ipv4.address }}"
 
 - hosts: node-1
   tasks:
